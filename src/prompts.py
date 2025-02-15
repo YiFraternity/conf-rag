@@ -14,7 +14,8 @@ If the document contains information relevant to the question, please answer usi
 - Question: {reasoning}
 - Answer:"""
 
-CONFIDENCE_VALUE_TEMPLATE = """Analyze the response based on the provided context and determine a confidence score between 0 and 1, where a value closer to 1 indicates a better ability of the response to answer the question. Please provide the confidence score first, followed by an explanation.
+CONFIDENCE_VALUE_TEMPLATE = """Assess the provided response by evaluating its relevance to the Question and coherence with the History Response. Assign a confidence score between **0.0** (lowest) and **1.0** (highest), where values closer to 1.0 reflect stronger alignment and completeness. Prioritize reducing the score if evidence is insufficient or contradictions exist. Output format:
+"Score: [0.0-1.0]\nExplanation: [Concise rationale].
 
 {docs}
 - Question: {question}
@@ -22,7 +23,9 @@ CONFIDENCE_VALUE_TEMPLATE = """Analyze the response based on the provided contex
 - Your Response: {response}
 - Confidence:"""
 
-CONFIDENCE_LEVEL_TEMPLATE = """Analyze the response based on the provided context and determine a confidence level. Please provide the confidence level first, followed by an explanation. Additionally, if the evidence is insufficient, adjust the confidence level downward.
+CONFIDENCE_LEVEL_TEMPLATE = """Evaluate the confidence level for the provided response by analyzing its alignment with the Question and consistency with the History Response. Present the numerical confidence level (1-5) immediately, followed by a rationale. Prioritize downward adjustments in confidence scoring when supporting evidence is limited or ambiguous. Maintain this output format:
+"[Confidence Level]. [Label]\n[Explanation]"
+
 [1]. Very Certain
 [2]. Fairly Certain
 [3]. Lightly Certain

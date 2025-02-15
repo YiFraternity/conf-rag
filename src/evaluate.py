@@ -116,7 +116,7 @@ def main():
     if need_generate:
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
         if use_vllm:
-            model = LLM(model=args.model_name_or_path)
+            model = LLM(model=args.model_name_or_path, max_model_len=16384)
         else:
             model = AutoModelForCausalLM.from_pretrained(
                 args.model_name_or_path, device_map="auto",
