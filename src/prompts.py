@@ -17,7 +17,8 @@ If the document contains information relevant to the question, please answer usi
 CONFIDENCE_VALUE_TEMPLATE = """Analyze the response based on the provided context and determine a confidence score between 0 and 1, where a value closer to 1 indicates a better ability of the response to answer the question. Please provide the confidence score first, followed by an explanation.
 
 {docs}
-- Context: {context}
+- Question: {question}
+- History Response: {history_resp}
 - Your Response: {response}
 - Confidence:"""
 
@@ -29,8 +30,9 @@ CONFIDENCE_LEVEL_TEMPLATE = """Analyze the response based on the provided contex
 [5]. Very Uncertain
 
 {docs}
-- Context: {context}
-- Response: {response}
+- Question: {question}
+- History Response: {history_resp}
+- Your Response: {response}
 - Confidence Level:"""
 
 KEYWORDS_TEMPLATE = """Please use 2 to 3 keywords to express the idea behind this sentence.

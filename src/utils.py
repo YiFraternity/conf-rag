@@ -201,7 +201,8 @@ def get_conf_prompt(question:str, history_resp:str, response:str, docs:list, con
     Template = CONFIDENCE_VALUE_TEMPLATE if conf_type == 'value' else CONFIDENCE_LEVEL_TEMPLATE
     conf_prompt = Template.format(
         docs=doc_str,
-        context=context,
+        question=question,
+        history_resp=history_resp,
         response=response,
     )
     return conf_prompt
