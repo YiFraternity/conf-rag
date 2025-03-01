@@ -194,11 +194,11 @@ def get_answer_prompt(docs: list, demo: list, question: str, text:str):
 
 
 def get_conf_prompt(question:str, history_resp:str, response:str, docs:list, conf_type='value'):
-    context = question + " " + history_resp
     doc_str = get_docstr(docs)
     if len(docs) > 0:
         doc_str = ('\n' + doc_str + CONFIDENCE_USE_DOCS_SUFFIX)
     Template = CONFIDENCE_VALUE_TEMPLATE if conf_type == 'value' else CONFIDENCE_LEVEL_TEMPLATE
+    # Template = CONFIDENCE_VALUE_ONLY_CURR_RESPONSE_TEMPLATE if conf_type == 'value' else CONFIDENCE_LEVEL_ONLY_CURR_RESPONSE_TEMPLATE
     conf_prompt = Template.format(
         docs=doc_str,
         question=question,
