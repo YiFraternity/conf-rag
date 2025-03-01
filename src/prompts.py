@@ -38,6 +38,28 @@ CONFIDENCE_LEVEL_TEMPLATE = """Evaluate the confidence level for the provided re
 - Your Response: {response}
 - Confidence Level:"""
 
+CONFIDENCE_VALUE_ONLY_CURR_RESPONSE_TEMPLATE = """Assess the provided response. Assign a confidence score between **0.0** (lowest) and **1.0** (highest), where values closer to 1.0 reflect stronger alignment and completeness. Prioritize reducing the score if evidence is insufficient or contradictions exist. Output format:
+"Score: [0.0-1.0]\nExplanation: [Concise rationale].
+
+{docs}
+- History Response: {history_resp}
+- Your Response: {response}
+- Confidence:"""
+
+CONFIDENCE_LEVEL_ONLY_CURR_RESPONSE_TEMPLATE = """Evaluate the confidence level for the provided response. Present the numerical confidence level (1-5) immediately, followed by a rationale. Prioritize downward adjustments in confidence scoring when supporting evidence is limited or ambiguous. Maintain this output format:
+"[Confidence Level]. [Label]\n[Explanation]"
+
+[1]. Very Certain
+[2]. Fairly Certain
+[3]. Lightly Certain
+[4]. Not Certain
+[5]. Very Uncertain
+
+{docs}
+- History Response: {history_resp}
+- Your Response: {response}
+- Confidence Level:"""
+
 KEYWORDS_TEMPLATE = """Please use 2 to 3 keywords to express the idea behind this sentence.
 - Sentence: {sentence}"""
 
