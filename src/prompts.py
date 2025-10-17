@@ -7,58 +7,97 @@ ANSWER_NOT_USE_DEMO_TEMPLATE = """When the answer is sufficient to resolve the q
 
 ANSWER_USE_DOCS_TEMPLATE = """ Please step-by-step through the process of considering what kind of knowledge is needed to answer the question. If such knowledge is present in the document, please utilize it to answer the Question. If not, please disregard the docs."""
 
-# CONTINUE_ANSWER_TEMPLATE = """ If more details are needed, continue step-by-step until the answer is complete. Please continue generating the answer without repeating any previously generated content. Start from where it left off and continue reasoning to complete the remaining part."""
 
 STEP_REASON_ANSWER_TEMPLATE = """{docs}
 If the document contains information relevant to the question, please answer using a complete sentence based on that information. If the document does not contain content related to the current reasoning path, return the question.
 - Question: {reasoning}
 - Answer:"""
 
-CONFIDENCE_VALUE_TEMPLATE = """Assess the provided response by evaluating its relevance to the Question and coherence with the History Response. Assign a confidence score between **0.0** (lowest) and **1.0** (highest), where values closer to 1.0 reflect stronger alignment and completeness. Prioritize reducing the score if evidence is insufficient or contradictions exist. Output format:
-"Score: [0.0-1.0]\nExplanation: [Concise rationale].
+CONFIDENCE_VALUE_TEMPLATE = """Assess the provided response by evaluating its relevance to the Question and coherence with the History Response. Assign a confidence score between **0.0** (lowest) and **1.0** (highest), where values closer to 1.0 reflect stronger alignment and completeness. Prioritize reducing the score if evidence is insufficient or contradictions exist.
 
 {docs}
-- Question: {question}
-- History Response: {history_resp}
-- Your Response: {response}
-- Confidence:"""
+### Question:
+{question}
+### History Response:
+{history_resp}
+### Your Response:
+{response}
+### Output Format:
+```json
+{
+    "Confidence": [0.0-1.0],
+    "Current Sentence": [Sentence that requires confidence estimation],
+    "Explanation": [Concise rationale]
+}
+```"""
 
-CONFIDENCE_LEVEL_TEMPLATE = """Evaluate the confidence level for the provided response by analyzing its alignment with the Question and consistency with the History Response. Present the numerical confidence level (1-5) immediately, followed by a rationale. Prioritize downward adjustments in confidence scoring when supporting evidence is limited or ambiguous. Maintain this output format:
-"[Confidence Level]. [Label]\n[Explanation]"
+CONFIDENCE_LEVEL_TEMPLATE = """Evaluate the confidence level for the provided response **only with respect to the specific information it explicitly addresses**, even if the Question requests a comparison or involves multiple entities. Do **not** penalize the response for omitting information that has not yet been provided.
 
-[1]. Very Certain
-[2]. Fairly Certain
-[3]. Lightly Certain
-[4]. Not Certain
-[5]. Very Uncertain
+Present the numerical confidence level (1–5). Prioritize downward adjustments only when the **stated** information is ambiguous or unsupported — **not simply because the response is incomplete relative to the full Question**.
 
-{docs}
-- Question: {question}
-- History Response: {history_resp}
-- Your Response: {response}
-- Confidence Level:"""
+The evaluation should be strictly based on the information contained in the *current response only*, without inferring or relying on any additional context that has not yet been provided. **If the Question involves multiple entities or conditions, assess only the correctness of the part that is explicitly answered, and treat unaddressed components as pending rather than incorrect.** Any missing or supplementary information required for further evaluation will be provided in subsequent steps.
 
-CONFIDENCE_VALUE_ONLY_CURR_RESPONSE_TEMPLATE = """Assess the provided response. Assign a confidence score between **0.0** (lowest) and **1.0** (highest), where values closer to 1.0 reflect stronger alignment and completeness. Prioritize reducing the score if evidence is insufficient or contradictions exist. Output format:
-"Score: [0.0-1.0]\nExplanation: [Concise rationale].
-
-{docs}
-- History Response: {history_resp}
-- Your Response: {response}
-- Confidence:"""
-
-CONFIDENCE_LEVEL_ONLY_CURR_RESPONSE_TEMPLATE = """Evaluate the confidence level for the provided response. Present the numerical confidence level (1-5) immediately, followed by a rationale. Prioritize downward adjustments in confidence scoring when supporting evidence is limited or ambiguous. Maintain this output format:
-"[Confidence Level]. [Label]\n[Explanation]"
-
-[1]. Very Certain
-[2]. Fairly Certain
-[3]. Lightly Certain
-[4]. Not Certain
-[5]. Very Uncertain
+1. Very Uncertain
+2. Not Certain
+3. Lightly Certain
+4. Fairly Certain
+5. Very Certain
 
 {docs}
-- History Response: {history_resp}
-- Your Response: {response}
-- Confidence Level:"""
+### Question:
+{question}
+### History Response:
+{history_resp}
+### Your Response:
+{response}
+### Output Format:
+```json
+{{
+    "Confidence": [1-5],
+    "Current Sentence": [Sentence that requires confidence estimation],
+    "Explanation": [Concise rationale]
+}}
+```"""
+
+CONFIDENCE_VALUE_ONLY_CURR_RESPONSE_TEMPLATE = """Evaluate the confidence level for the provided response **only with respect to the specific information it explicitly addresses**, even if the Question requests a comparison or involves multiple entities. Do **not** penalize the response for omitting information that has not yet been provided.
+
+Assess the provided response. Assign a confidence score between **0.0** (lowest) and **1.0** (highest), where values closer to 1.0 reflect stronger alignment and completeness. Prioritize downward adjustments only when the **stated** information is ambiguous or unsupported — **not simply because the response is incomplete relative to the full Question**.
+
+The evaluation should be strictly based on the information contained in the *current response only*, without inferring or relying on any additional context that has not yet been provided. **If the Question involves multiple entities or conditions, assess only the correctness of the part that is explicitly answered, and treat unaddressed components as pending rather than incorrect.** Any missing or supplementary information required for further evaluation will be provided in subsequent steps.
+
+{docs}
+### History Response:
+{history_resp}
+### Your Response:
+{response}
+### Output Format:
+```json
+{{
+    "Score": [0.0-1.0],
+    "Explanation": [Concise rationale]
+}}
+```"""
+
+CONFIDENCE_LEVEL_ONLY_CURR_RESPONSE_TEMPLATE = """Evaluate the confidence level for the provided response by analyzing its alignment with the Question and consistency with the History Response. Present the numerical confidence level (1–5). Prioritize downward adjustments in confidence scoring when supporting evidence is limited or ambiguous. The evaluation should be strictly based on the information contained in the *current response only*, without inferring or relying on any additional context that has not yet been provided. **If the Question involves multiple entities or conditions, assess only the part that is explicitly addressed in the current response, and do not speculate about any missing components.** Any missing or supplementary information required for further evaluation will be provided in subsequent steps.
+
+1. Very Uncertain
+2. Not Certain
+3. Lightly Certain
+4. Fairly Certain
+5. Very Certain
+
+{docs}
+### History Response:
+{history_resp}
+### Your Response:
+{response}
+### Output Format:
+```json
+{{
+    "Confidence Level": [1-5],
+    "Explanation": [Concise rationale]
+}}
+```"""
 
 KEYWORDS_TEMPLATE = """Please use 2 to 3 keywords to express the idea behind this sentence.
 - Sentence: {sentence}"""
@@ -87,67 +126,53 @@ HALLUICATION_INFO_TEMPLATE = """The following response contains hallucinations. 
 - Response: {response}
 - Query:"""
 
-INIT_INFO_TEMPLATE = """Please reason-step-by step to answer the question, first considering what initial information is needed to answer the question, and generate a relevant query. Note: Only generate the query, do not include the reasoning process. Refer to the following examples:
-- Question: Which Golden Globe lifetime achievement award did the lead actor of Forrest Gump receive?
-- Query: Who is the lead actor in Forrest Gump?
-- Question: What was the profession of the founder of Amazon before founding the company?
-- Query: Who is the founder of Amazon?
-- Question: {question}
-- Query:"""
 
-MISSING_INFO_TEMPLATE = """Carefully analyze the response to identify any missing information needed to fully answer the question. Based on the missing information, generate a relevant query, starting with 'So, the query is'.
-- Question: {question}
-- Response: {response}
-- Query:"""
+MISSING_INFO_TEMPLATE = """Carefully analyze the response to identify any missing information needed to fully answer the question. Based on the missing information, generate a relevant query.
+If **no response** is provided (empty or only whitespace), treat the Known information as empty and list the information required to answer the Question as Missing; then produce a query that requests the missing answer or data.
+
+### Question:
+{question}
+### Response:
+{response}
+### Output Format:
+```json
+{{
+    "Question": [Question],
+    "Known": [Known Information],
+    "Missing": [Missing Information],
+    "Query": [Query]
+}}
+```"""
 
 ENTITY_TEMPLATE = """Please identify all entities in the given sentence. If there are no entities, respond with 'None'. If multiple entities are present, list them in the following format: 'Entity1, Entity2, Entity3'.
 - Sentence: {sentence}
 - Entities:"""
 
 
-ENTITY_REPLEACE_TEMPLATE = """Please identify the entity in the response that is used to answer the question, and replace it with another entity of the same type. Then, return the modified response. If no entity is found, return 'None'. Provide only the modified response.
-- Question: {question}
-- Response: {sentence}
-- Modified Response:"""
+ENTITY_REPLEACE_TEMPLATE = """Please identify the **entity** in the response that is used to answer the question, and **replace it** with **another entity** of the same type, then return the **modified response**. If no entity is found, modify the response to 'None'.
+
+### Question:
+{question}
+### Response:
+{sentence}
+### Output Format:
+```json
+{
+    "Origial": [Original response],
+    "Entity": [Entity],
+    "Modified": [Modified response]
+}
+```"""
 
 CONFIDENCE_USE_DOCS_SUFFIX = """Above are the documents related to the "Context". """
 CONFIDENCE_USE_DOCS_PREFIX = """Below are the documents related to the "Context"."""
 CONFIDENCE_USE_DOCS = """When you provide your confidence in "Your Response", please refer to the documents."""
 CONFIDENCE_USE_DOCUS_TEMPLATE = "Please provide your confidence in your response based on the above documents.\n"
-#"""Confucius said, 'To know what you know and to know what you do not know, that is true knowledge.'
-#I believe you have true knowledge, and I will provide you with a specific context and your response. Please provide your score of confidence in your response to demonstrate your familiarity with the relevant knowledge. Please note that the score of confidence is between 0 and 1, and the closer the value is to 1, the better your understanding of this knowledge.
-#Context: {context}
-#Your Response: {response}
-#Confidence:"""
 
-#"""You're a Q&A reasoning master, and you can judge the confidence level of an answer based on context. I'm going to give you a pair of clues next, including "Contexter" and your Respence. And all you have to do is give each sentence based on Contekste's confidence. Please note that the score of confidence is between 0 and 1, and the closer the value is to 1, the better your understanding of this knowledge.
-#The template is as follows: Context: {context}
-#Your Response: {response}
-#Confidence:"""
-
-
-# CONFIDENCE_INSTRUCTION = """Below you'll find contexts submitted by the user along with the responses your own generated. You should provide a confidence level for your responses, rated on a scale from 0 to 1. A higher score reflects a greater level of confidence in the accuracy of the generated responses. Please include your confidence estimate with each response you provide.
-# Question:{question}
-# Context:{context}
-# Response:{response}
-# Confidence:"""
-
-
-# REFLECTION_HEADER = 'You have attempted to answer following question before and failed. The following reflection(s) give a plan to avoid failing to answer the question in the same way you did previously. Use them to improve your strategy of correctly answering the given question.\n'
 REFLECTION_HEADER = 'You have attempted to answer following question before and failed. The following reflection(s) give a plan to avoid failing to answer the question in the same way you did previously. Use them to improve your strategy of correctly answering the given question.\n'
-# 以下反思提供了一个计划，以避免无法像以前那样回答问题。
-# 使用它们来改进你正确回答给定问题的策略。
-# REFLECTION_AFTER_LAST_TRIAL_HEADER = 'The following reflection(s) give a plan to avoid failing to answer the question in the same way you did previously. Use them to improve your strategy of correctly answering the given question.\n'
 REFLECTION_AFTER_LAST_TRIAL_HEADER = 'The following reflection(s) give a plan to avoid failing to answer the question in the same way you did previously. Use them to improve your strategy of correctly answering the given question.\n'
-# 你以前曾尝试回答以下问题，但失败了。以下是你试图回答问题的最后一次尝试。n
 LAST_TRIAL_HEADER = 'You have attempted to answer the following question before and failed. Below is the last trial you attempted to answer the question.\n'
 
-
-
-# 你以前曾试图回答以下问题，但失败了。以下反思提供了一个计划，
-# 以避免无法像以前那样回答问题。使用它们来改进你正确回答给定问题的策略。
-
-# 作为老师，我将为你提供学生提出的问题、他们之前的推理步骤，以及他们最后一次失败的回复。请仔细阅读并分析学生的推理过程和失败的回复。识别出学生在推理过程中出现的错误，并提供建设性的反馈，帮助学生理解错误的根源，从而改进其推理能力。
 TUTOR_ADVICE_HEADER = "I hope you can provide advice to help student as a knowledgeable tutor. I will give you a question, the student's previous reasoning content for the question, and their most recent fail responses."
 TUTOR_USE_DOCS = """Below are the documents referred to by student while answering questions."""
 TUTOR_USE_DOCS_MIDDLE = """Please provide "Advice" in the same format as the examples based on above documents."""
@@ -159,16 +184,21 @@ Examples:
 {examples}
 
 {docs}{middle}
-Question: {question}
-Previous reasoning: {history_resp}
-Fail Response: {response}
-Advice:"""
+### Question:
+{question}
+### Previous reasoning:
+{history_resp}
+### Fail Response:
+{response}
+### Output Format:
+```json
+{{
+    "Question": [Question],
+    "Reason": [Advice Reason],
+    "Advice": [Advice]
+}}
+```"""
 
-
-
-# 你是一个能够自我反思和持续改进的高级推理代理。
-# 每道题都会为你提供一个问题和之前试验。仔细阅读问题和之前试验，以及提供的建议，并通过思考来改善试验。
-# 思考可以对当前情况进行推理，返回答案并完成任务。
 REFLECTION_HEADER = """You’re an advanced reasoning agent capable of self-reflection and continuous improvement. Each problem will provide you with a question, previous excellent responses, and the last failed response."""
 REFLECT_USE_DOC = """Below are the documents related to the question."""
 REFLECT_USE_DOC_MIDDLE = """Based on the Documents provided above and the Adivce given below, """
@@ -180,8 +210,19 @@ Examples:
 {examples}
 
 {docs}{middle}
-Question: {question}
-Previous reasoning: {history_resp}
-Fail Response: {response}
-Advice: {tutor_ins}
-Modified Response:"""
+### Question:
+{question}
+### Previous reasoning:
+{history_resp}
+### Fail Response:
+{response}
+### Advice:
+{tutor_ins}
+### Output Format:
+```json
+{{
+    "Question": [Question],
+    "Reason": [Refine Reason],
+    "Modified": [Modified Response]
+}}
+```"""

@@ -1,10 +1,108 @@
 import re
-from typing import List
+from typing import List, Dict, Any, Union, Optional
+import json
 import spacy
 nlp = spacy.load("en_core_web_sm")
 from prompts import *
 
 ANSWER_NEW_TOKEN_NUM = 2048
+
+def _extract_first_json_like(text: str) -> Optional[Any]:
+    """
+    Extract and parse the first balanced JSON object or array found in text.
+
+    Handles nested braces/brackets and string escaping. Returns a parsed object
+    (dict or list) if successful; otherwise None.
+    """
+    # Try object then array
+    for opener, closer in (("{", "}"), ("[", "]")):
+        for m in re.finditer(re.escape(opener), text):
+            start = m.start()
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start, len(text)):
+                ch = text[i]
+                if in_string:
+                    if escape:
+                        escape = False
+                    elif ch == "\\":
+                        escape = True
+                    elif ch == '"':
+                        in_string = False
+                else:
+                    if ch == '"':
+                        in_string = True
+                    elif ch == opener:
+                        depth += 1
+                    elif ch == closer:
+                        depth -= 1
+                        if depth == 0:
+                            candidate = text[start:i+1].strip()
+                            try:
+                                return json.loads(candidate)
+                            except Exception:
+                                break  # stop this candidate and continue
+            # continue trying next opener occurrence
+    return None
+
+def _extract_field_value(raw_text: str, field: str) -> Optional[str]:
+    """Extract a single string field value from raw text using regex fallbacks.
+
+    Attempts in order:
+    1) Quoted value with double quotes:  "Field": "..."
+    2) Quoted value with single quotes:  'Field' = '...'
+    3) Unquoted until end-of-line:      Field: ...\n
+    Returns the extracted string (without surrounding quotes) or None if not found.
+    """
+    pattern = rf'''
+        \s*['"]?\b{re.escape(field)}\b['"]?\s*[:=]\s*
+        (?:
+            ['"]((?:[^'"\\]|\\.)*)['"]
+        |
+            ([^\n\r]+)
+        )
+    '''
+    m = re.search(pattern, raw_text, re.VERBOSE | re.IGNORECASE | re.DOTALL)
+    if m:
+        if m.group(1) is not None:
+            return m.group(1).strip()
+        elif m.group(2) is not None:
+            return m.group(2).strip()
+    return None
+
+def clean_json_txt(json_txt: str) -> Union[Dict[str, Any], str]:
+    """
+    从可能包含 ```json ... ``` 或 ``` ... ``` 的文本中提取 JSON 并解析为 dict。
+
+    优先级：
+      1) 第一个标记为 ```json 的代码块（忽略大小写）
+      2) 第一个任意 ``` ... ``` 代码块
+      3) 整个输入字符串
+
+    解析失败时返回原始字符串。
+    """
+    if not isinstance(json_txt, str):
+        raise TypeError("json_txt must be a str")
+
+    # 1) 优先查找 ```json ... ```（不区分大小写）
+    m = re.search(r'```(?:\s*json\b)[\r\n]*([\s\S]*?)```', json_txt, re.IGNORECASE)
+    # 2) 若没有带 json 标记的，再查找任意 ``` ... ``` 代码块
+    if not m:
+        m = re.search(r'```[\r\n]*([\s\S]*?)```', json_txt)
+
+    if m:
+        payload = m.group(1).strip()
+    else:
+        payload = json_txt.strip()
+
+    try:
+        return json.loads(payload)
+    except json.JSONDecodeError:
+        extracted = _extract_first_json_like(json_txt)
+        if extracted is not None:
+            return extracted
+        return json_txt
 
 
 def find_element_index(lst, element):
@@ -13,7 +111,6 @@ def find_element_index(lst, element):
         return index
     except ValueError:
         return -1
-
 
 def split_sentences(text: str) -> List[str]:
     sentences = [sent.text.strip() for sent in nlp(text).sents]
@@ -46,56 +143,57 @@ def process_answer_text(raw_text, pre_answer):
     not_in_prompt_texts = [text for text in all_texts if text not in pre_answer]
     return ' '.join(not_in_prompt_texts).strip()
 
+def process_confidence_text(raw_text, conf_type='value'):
+    data = clean_json_txt(raw_text)
+    score = None
+    if isinstance(data, dict):
+        score = data.get("Confidence", None)
+    if score is None:
+        m = re.search(r'(?i)"?confidence"?\s*[:=]\s*([-+]?\d*\.?\d+)', raw_text)
+        if m:
+            try:
+                score = float(m.group(1))
+            except Exception:
+                score = None
+    if score is None:
+        print(raw_text)
+        raise ValueError("Expected a JSON object")
 
-def process_confidence_text(raw_text, prompt):
-    text = raw_text
-    ptns_choice = [
-        r'(?i).*?\bconfidence\s*[:：]\s*',
-        r'(?i).*?\bmy confidence is',
-        r'(?i).*?\ba confidence level',
-    ]
-    for ptns in ptns_choice:
-        pattern = re.compile(ptns, re.DOTALL)
-        text = re.sub(pattern, '', text)
-    tmp = re.findall(r"\d+\.?\d*", text)
-    if len(tmp) > 0:
-        confs = float(tmp[0])
-        if confs > 1:
-            num_digits = len(str(int(confs)))
-            scale_factor = 10 ** num_digits
-            confs = min(1, confs / scale_factor)
-    else:
-        confs = 0.0
-    return confs
+    if isinstance(score, str):
+        score = float(score)
 
-def process_advice_text(raw_text, prompt):
-    text = raw_text
-    ptns_choice = [
-        r'(?i).*?\badvice\s*[:：]\s*',
-        r'(?i).*?\bmy advice is',
-        r'(?i).*?\ba advice is',
-    ]
-    for ptns in ptns_choice:
-        pattern = re.compile(ptns, re.DOTALL)
-        text = re.sub(pattern, '', text)
-    text = text.replace('\n', ' ')
-    return text
+    if conf_type == 'level':
+        if score > 1:
+            score = score / 5
+    # If value still >1 but within 1..5, normalize defensively
+    if isinstance(score, (int, float)) and 1 < score <= 5 and conf_type != 'level':
+        score = score / 5
 
-def process_reflect_text(raw_text, prompt):
-    text = raw_text
-    ptns_choice = [
-        r'(?i).*?\bmodified response\s*[:：]\s*',
-        r'(?i).*?\bmy modified response is',
-        r'(?i).*?\ba modified response is',
-    ]
-    for ptns in ptns_choice:
-        pattern = re.compile(ptns, re.DOTALL)
-        text = re.sub(pattern, '', text)
-    text = text.replace('\n', ' ')
-    return text
+    if not isinstance(score, (int, float)) or not (0 <= score <= 1):
+        raise ValueError("Score must be a number between 0 and 1")
+
+    return score
+
+def process_advice_text(raw_text):
+    data = clean_json_txt(raw_text)
+    if isinstance(data, dict) and "Advice" in data:
+        return data.get("Advice", "")
+    extracted = _extract_field_value(raw_text, "Advice")
+    if extracted is not None:
+        return extracted
+    raise ValueError("Missing 'Advice' field")
+
+def process_reflect_text(raw_text):
+    data = clean_json_txt(raw_text)
+    if isinstance(data, dict) and "Modified" in data:
+        return data.get("Modified", "")
+    extracted = _extract_field_value(raw_text, "Modified")
+    if extracted is not None:
+        return extracted
+    raise ValueError("Missing 'Modified' field")
 
 
-def process_keywords_text(raw_text, prompt):
+def process_keywords_text(raw_text):
     text = raw_text
     ptns_choice = [
         r'(?i).*?\bkeywords\s*[:：]\s*',
@@ -108,18 +206,18 @@ def process_keywords_text(raw_text, prompt):
     text = text.replace('\n', ' ')
     return text
 
-def process_retr_info_text(raw_text, prompt):
-    text = raw_text
-    ptns_choice = [
-        r'(?i).*?\bquery is\s*[:：]?',
-        r'(?i).*?\ba query is\s*[:：]?',
-        r'(?i).*?\bquery[:：]?',
-    ]
-    for ptns in ptns_choice:
-        pattern = re.compile(ptns, re.DOTALL)
-        text = re.sub(pattern, '', text)
-    text = text.replace('\n', ' ')
-    return text
+def process_retr_info_text(raw_text):
+    data = clean_json_txt(raw_text)
+    # Primary: structured JSON
+    if isinstance(data, dict) and "Query" in data:
+        return data.get("Query", "")
+
+    # Regex fallbacks
+    extracted = _extract_field_value(raw_text, "Query")
+    if extracted is not None:
+        return extracted
+
+    raise ValueError("Missing 'Query' field")
 
 def is_ans_unknown(answers: List[str]) -> bool:
     unknown_values = [
@@ -197,9 +295,8 @@ def get_conf_prompt(question:str, history_resp:str, response:str, docs:list, con
     doc_str = get_docstr(docs)
     if len(docs) > 0:
         doc_str = ('\n' + doc_str + CONFIDENCE_USE_DOCS_SUFFIX)
-    Template = CONFIDENCE_VALUE_TEMPLATE if conf_type == 'value' else CONFIDENCE_LEVEL_TEMPLATE
-    # Template = CONFIDENCE_VALUE_ONLY_CURR_RESPONSE_TEMPLATE if conf_type == 'value' else CONFIDENCE_LEVEL_ONLY_CURR_RESPONSE_TEMPLATE
-    conf_prompt = Template.format(
+    template = CONFIDENCE_VALUE_TEMPLATE if conf_type == 'value' else CONFIDENCE_LEVEL_TEMPLATE
+    conf_prompt = template.format(
         docs=doc_str,
         question=question,
         history_resp=history_resp,

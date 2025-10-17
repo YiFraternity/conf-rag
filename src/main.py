@@ -1,5 +1,7 @@
 import os
 import os.path as osp
+os.environ['CUDA_VISIBLE_DEVICES']='4,5'
+os.environ['VLLM_WORKER_MULTIPROC_METHOD']='spawn'
 import json
 import argparse
 from tqdm import tqdm
@@ -15,7 +17,7 @@ logger = logging.getLogger(__name__)
 def get_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument("-c", "--config_path", type=str, required=True)
-    parser.add_argument("--config_path", type=str, default='dragin/config/Llama3-8b-chat/StrategyQA/SeqRAG_BGE.json', help='config path')
+    parser.add_argument("--config_path", type=str, default='config/Qwen2.5-7B-Instruct/HotpotQA/SeqLevelNoReftGeneQuery.json', help='config path')
     args = parser.parse_args()
     config_path = args.config_path
     with open(config_path, "r") as f:

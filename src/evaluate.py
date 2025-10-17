@@ -1,4 +1,6 @@
 import os
+os.environ['CUDA_VISIBLE_DEVICES']='4,5'
+os.environ['VLLM_WORKER_MULTIPROC_METHOD']='spawn'
 import json
 import argparse
 import logging
@@ -12,6 +14,7 @@ from vllm import LLM, SamplingParams
 from utils import (
     get_answer_prompt,
 )
+GPU_NUMS = torch.cuda.device_count()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,7 +22,7 @@ logger = logging.getLogger(__name__)
 def get_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument("--dir", type=str, required=True)
-    parser.add_argument("--dir", type=str, default='results/SeqRAG/llama2_7b_chat_hotpotqa/BGEReranker')
+    parser.add_argument("--dir", type=str, default='results/Qwen2.5-7B-Instruct/SeqLevelNoReft/generate_query/hotpotqa/BM25')
     tmp = parser.parse_args()
     with open(os.path.join(tmp.dir, "config.json"), "r") as f:
         args = json.load(f)
@@ -116,7 +119,7 @@ def main():
     if need_generate:
         tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
         if use_vllm:
-            model = LLM(model=args.model_name_or_path, max_model_len=16384)
+            model = LLM(model=args.model_name_or_path, max_model_len=16384, tensor_parallel_size=GPU_NUMS)
         else:
             model = AutoModelForCausalLM.from_pretrained(
                 args.model_name_or_path, device_map="auto",
