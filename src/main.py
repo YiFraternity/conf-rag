@@ -1,7 +1,31 @@
+"""
+Purpose
+- Run config-driven inference for retrieval-augmented generation (RAG) on multi-hop QA datasets.
+- Support multiple retrieval and aggregation strategies and record per-sample diagnostics.
+
+Quick start
+- Run: python main.py --config_path path/to/config.json
+- The config.json controls: dataset, data_path, method, output_dir, fewshot, sample, retriever, and other generation options.
+
+Supported datasets
+- strategyqa, 2wikimultihopqa, hotpotqa, iirc
+
+Supported methods (examples)
+- non-retrieval, single-retrieval, fix-length-retrieval, fix-sentence-retrieval, random-sentence-retrieval, token, entity, attn_prob, dragin, seq_confidence
+
+Outputs
+- output_dir/config.json — saved config used for the run
+- output_dir/output.txt — one JSON line per example with qid, prediction, and optional counters
+
+Location
+- Place dataset and config files as referenced by config.json. The script writes outputs into the configured output_dir.
+
+License
+- Intended for research and evaluation; adapt and attribute as needed.
+"""
+
 import os
 import os.path as osp
-os.environ['CUDA_VISIBLE_DEVICES']='4,5'
-os.environ['VLLM_WORKER_MULTIPROC_METHOD']='spawn'
 import json
 import argparse
 from tqdm import tqdm
@@ -38,12 +62,6 @@ def main():
     # output dir
     if os.path.exists(args.output_dir) is False:
         os.makedirs(args.output_dir)
-    # dir_name = os.listdir(args.output_dir)
-    # for i in range(10000):
-    #     if str(i) not in dir_name:
-    #         args.output_dir = os.path.join(args.output_dir, str(i))
-    #         os.makedirs(args.output_dir)
-    #         break
     if 'retriever' in args:
         args.output_dir = osp.join(args.output_dir, args.retriever)
     else:
