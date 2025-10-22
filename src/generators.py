@@ -2,7 +2,7 @@ import logging
 import numpy as np
 import spacy
 import torch
-from typing import Optional, Dict, Any, Union, List
+from typing import Callable, Optional, Dict, Any, Union, List
 from scipy.special import softmax
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
 from vllm import LLM, SamplingParams
@@ -10,7 +10,7 @@ from openai import OpenAI
 from prompts import *
 from utils import *
 
-GPU_NUMS = 2
+GPU_NUMS = 1
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ class BasicGenerator:
 
     def generate(
             self,
-            input_text,
+            input_text: Union[List, str],
             max_new_tokens: int,
             return_logprobs: bool = False,
             gen_type: str = "answer",
@@ -116,33 +116,33 @@ class BasicGenerator:
             If input_text is str, returns Union[str, tuple]
             If input_text is List[str], returns List[Union[str, tuple]]
         """
-        # Handle batch input
-        if isinstance(input_text, list):
-            return self._generate_batch(input_text, max_new_tokens, gen_type, process_gen_text, **kwargs)
-        return self._generate_single(input_text, max_new_tokens, return_logprobs, gen_type, process_gen_text, **kwargs)
-
-    def _generate_batch(
-            self,
-            input_text: List[str],
-            max_new_tokens: int,
-            gen_type: str = "answer",
-            process_gen_text: bool = False,
-            **kwargs,
-    ):
         process_fns = {
             'answer': process_answer_text,
             'confidence': process_confidence_text,
             'advice': process_advice_text,
             'reflection': process_reflect_text,
             'keywords': process_keywords_text,
-            'retr_info': process_retr_info_text
+            'retr_info': process_retr_info_text,
+            'entity_turb': process_entity_turb_text,
         }
-
         if gen_type not in process_fns:
             raise ValueError(f"gen_type {gen_type} is not supported. Must be one of {list(process_fns.keys())}")
-
         process_text = process_fns[gen_type]
+        if gen_type == 'answer':
+            kwargs['pre_answer'] = input_text
+        # Handle batch input
+        if isinstance(input_text, list):
+            return self._generate_batch(input_text, max_new_tokens, process_text, process_gen_text, **kwargs)
+        return self._generate_single(input_text, max_new_tokens, return_logprobs, process_text, process_gen_text, **kwargs)
 
+    def _generate_batch(
+            self,
+            input_text: List[str],
+            max_new_tokens: int,
+            process_text: Callable,
+            process_gen_text: bool = False,
+            **kwargs,
+    ) -> List[tuple[str, Union[str, float], None, None]]:
         messages = [self._get_chat_message_(prompt) for prompt in input_text]
         sampling_params = SamplingParams(
             temperature=self.generate_config['temperature'],
@@ -161,8 +161,6 @@ class BasicGenerator:
         for o_t in outputs_t:
             text = o_t.outputs[0].text
             if process_gen_text:
-                if gen_type == 'answer':
-                    kwargs['pre_answer'] = input_text
                 processed_text = process_text(text, **kwargs)
             else:
                 processed_text = text
@@ -174,10 +172,10 @@ class BasicGenerator:
             input_text: str,
             max_new_tokens: int,
             return_logprobs: bool,
-            gen_type: str,
+            process_text: Callable,
             process_gen_text: bool,
             **kwargs,
-    ) -> Union[str, tuple]:
+    ) -> tuple[str, Union[str, float], None, None]:
         """Generate text using the specified model.
 
         Args:
@@ -191,21 +189,6 @@ class BasicGenerator:
             If return_logprobs is True, returns a tuple of (text, tokens, logprobs)
             Otherwise, returns the generated text as a string
         """
-        # Map generation type to processing function
-        process_fns = {
-            'answer': process_answer_text,
-            'confidence': process_confidence_text,
-            'advice': process_advice_text,
-            'reflection': process_reflect_text,
-            'keywords': process_keywords_text,
-            'retr_info': process_retr_info_text
-        }
-
-        if gen_type not in process_fns:
-            raise ValueError(f"gen_type {gen_type} is not supported. Must be one of {list(process_fns.keys())}")
-
-        process_text = process_fns[gen_type]
-
         if hasattr(self, 'use_openai') and self.use_openai:
             messages = self._get_chat_message_(input_text)
 
@@ -313,8 +296,6 @@ class BasicGenerator:
             )
             text = outputs[0].outputs[0].text
         if process_gen_text:
-            if gen_type == 'answer':
-                kwargs['pre_answer'] = input_text
             processed_text = process_text(text, **kwargs)
         else:
             processed_text = text

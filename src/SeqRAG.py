@@ -8,74 +8,78 @@ class SeqConfidenceRAG(BasicRAG):
     def __init__(self, args):
         super().__init__(args)
 
-    def _get_seq_confs_level_(self, question:str, history_resp:str, response:str, docs:list, conf_type='value'):
+    def _get_seq_confs_value_(self, question:str, history_resp:str, sentences:List[str], docs:list, conf_type='value') -> List[float]:
+        conf_prompts = []
+        for i, sent in enumerate(sentences):
+            prev_batch_text = ' '.join(sentences[:i]) if i > 0 else ''
+            current_history = (history_resp + (' ' + prev_batch_text if prev_batch_text else '')).strip()
+            conf_prompt = get_conf_prompt(
+                question=question,
+                history_resp=current_history,
+                response=sent,
+                docs=docs,
+                conf_type=conf_type,
+            )
+            conf_prompts.append(conf_prompt)
 
-        def __conf_level_in_confs__(confs):
-            confs = float(confs)
-            if confs >= self.reflection_threshold:
-                return 'high'
-            elif confs >= self.hallucination_threshold:
-                return 'mid'
-            else:
-                return 'low'
-
-        conf_prompt = get_conf_prompt(
-            question=question,
-            history_resp=history_resp,
-            response=response,
-            docs=docs,
-            conf_type=conf_type,
-        )
-        text, confs, _, _ = self.generator.generate(
-            conf_prompt,
+        conf_results = self.generator.generate(
+            conf_prompts,
             max_new_tokens=1024,
             gen_type='confidence',
             process_gen_text=True,
+            conf_type=conf_type
+        )
+
+        confidence_value_lst = []
+        for conf_result in conf_results:
+            confidence_value_lst.append(conf_result[1])
+            text = conf_result[0]
+            if self.use_counter:
+                self.counter.add_generate(text, self.generator.tokenizer)
+        assert len(confidence_value_lst) == len(sentences)
+        return confidence_value_lst
+
+    def _get_confs_(self, question:str, history_resp:str, sentences:List[str], docs:list, conf_type='value') -> List[int]:
+        raw_seqs_conf_vals = self._get_seq_confs_value_(
+            question=question,
+            history_resp=history_resp,
+            sentences=sentences,
+            docs=docs,
             conf_type=conf_type,
         )
-        if self.use_counter:
-            self.counter.add_generate(text, self.generator.tokenizer)
-        conf_level = __conf_level_in_confs__(confs)
-        if "turbulence" not in self.__dict__ or not self.turbulence:
-            if conf_level == 'low':
-                return conf_level, 'lack knowledge'
-            else:
-                return conf_level, 'exact' if conf_level == 'high' else 'reflect'
-        else:
-            # Add perturbation to rejudge the confidence level of the model in response
-            if conf_level == 'low':
-                return conf_level, 'lack knowledge'
-            else:
-                turb_resp = ""
-                turb_resp, _, _, _ = self.generator.generate(
-                    ENTITY_REPLEACE_TEMPLATE.format(question=question, sentence=response),
-                    max_new_tokens=1024,
-                    return_logprobs=False,
-                    process_gen_text=False,
-                )
-                if turb_resp == '' or 'None' in turb_resp:   # confs is response confs
-                    return conf_level, 'exact' if conf_level == 'high' else 'reflect'
 
-                turb_conf_prompt = get_conf_prompt(
-                    question=question,
-                    history_resp=history_resp,
-                    response=turb_resp,
-                    docs=docs,
-                    conf_type=conf_type,
-                )
-                text, mod_confs, _, _ = self.generator.generate(
-                    turb_conf_prompt,
-                    max_new_tokens=self.generate_confidence_length,
-                    gen_type='confidence',
-                    process_gen_text=True if conf_type == 'value' else False,
-                )
-                mod_confs = __conf_level_in_confs__(mod_confs if conf_type == 'value' else text)
-                if self.use_counter:
-                    self.counter.add_generate(text, self.generator.tokenizer)
-                if mod_confs in ['high', 'mid']:
-                    return 'low', 'hallucination'
-                else:
-                    return conf_level, 'exact' if conf_level == 'high' else 'reflect'
+        if "turbulence" in self.__dict__ and self.turbulence:
+            turb_prompts = []
+            for sen in sentences:
+                prompt = ENTITY_REPLEACE_TEMPLATE.format(question=question, sentence=sen)
+                turb_prompts.append(prompt)
+
+            turb_resps = self.generator.generate(
+                turb_prompts,
+                max_new_tokens=1024,
+                gen_type='entity_turb',
+                process_gen_text=True,
+            )
+
+            turb_resp_texts = [_[0] for _ in turb_resps]
+            turb_resps_conf_vals = self._get_seq_confs_value_(
+                question=question,
+                history_resp=history_resp,
+                sentences=turb_resp_texts,
+                docs=docs,
+                conf_type=conf_type,
+            )
+            raw_seqs_conf_vals = [raw - turb for raw, turb in zip(raw_seqs_conf_vals, turb_resps_conf_vals)]
+
+        levels = []
+        for val in raw_seqs_conf_vals:
+            if val >= self.reflection_threshold:
+                levels.append(1)
+            elif val >= self.hallucination_threshold:
+                levels.append(0)
+            else:
+                levels.append(-1)
+        return levels
 
     def _generate_(self, docs=[], demo=[], question='', ptext='', qtype='answer', generate_length=-1):
         if qtype == 'reason':
@@ -114,7 +118,7 @@ class SeqConfidenceRAG(BasicRAG):
             question=question,
             response=response,
         )
-        text, retr_info, _, _ = self.generator.generate(
+        _, retr_info, _, _ = self.generator.generate(
             retr_info_prompt,
             max_new_tokens=1024,
             gen_type='retr_info',
@@ -122,7 +126,7 @@ class SeqConfidenceRAG(BasicRAG):
         )
         return retr_info
 
-    def _get_retr_docs_(self, question, hist_resps, cur_step_ptext, cur_ptext_conf_type, retr_type='retr_query'):
+    def _get_retr_docs_(self, question, hist_resps, cur_step_ptext, retr_type='retr_query'):
         """
         Args:
             question: str
@@ -191,7 +195,7 @@ class SeqConfidenceRAG(BasicRAG):
         advice_prompt = ADVICE_TEMPLATE.format(**tutor_data)
         text, advice, _, _ = self.generator.generate(
             advice_prompt,
-            max_new_tokens=self.max_length,
+            max_new_tokens=1024,
             return_logprobs=False,
             gen_type='advice',
             process_gen_text=True,
@@ -212,7 +216,7 @@ class SeqConfidenceRAG(BasicRAG):
         reflect_prompt = REFLECTION_TEMPLATE.format(**reft_prompt)
         text, reflect, _, _ = self.generator.generate(
             reflect_prompt,
-            max_new_tokens=self.max_length,
+            max_new_tokens=1024,
             return_logprobs=False,
             gen_type='reflection',
             process_gen_text=True,
@@ -220,26 +224,6 @@ class SeqConfidenceRAG(BasicRAG):
         if self.use_counter:
             self.counter.add_generate(text, self.generator.tokenizer)
         return reflect
-
-    def _get_confs_class_(self, question, history_resp, sent, docs):
-        confs_type = self.confs_class if "confs_class" in self.__dict__ else 'value'
-        conf_level, conf_type = self._get_seq_confs_level_(question, history_resp, sent, docs, confs_type)
-
-        confs_value = 0
-        if "use_reflect" not in self.__dict__ or not self.use_reflect:  # no reflect
-            if conf_level=='high':
-                confs_value = 1
-            else:
-                confs_value = -1
-            return confs_value, conf_type
-
-        if conf_level=='high':
-            confs_value = 1
-        elif conf_level=='low':
-            confs_value = -1
-        else:
-            confs_value = 0
-        return confs_value, conf_type
 
     def modifier(self, question, ptext, text, docs):
         """
@@ -249,78 +233,40 @@ class SeqConfidenceRAG(BasicRAG):
         Returns:
             ptexts_: list of str, sentences that exceed the hallucination threshold for first. If there are none, retain the first sentence.
             pconfs_: list of float, the confidence score for sentence in the ptexts_
-            pconf_types_: list of str, the confindence type for sentence in the ptexts_
             hallucination: bool, whether the text is hallucinated
         """
         hallucination = False
         reflect_tag = True
         sentences = split_sentences(text)
         if len(sentences) == 0:
-            return [], [], [], hallucination
+            return [], [], hallucination
 
         ptexts_, pconfs_, pconf_types_ = [], [], []
         history_resp = ptext
         conf_type=self.confs_class if "confs_class" in self.__dict__ else 'value'
 
-        # Collect all confidence prompts for batch inference
-        conf_prompts = []
-        for i, sent in enumerate(sentences):
-            prev_batch_text = ' '.join(sentences[:i]) if i > 0 else ''
-            current_history = (history_resp + (' ' + prev_batch_text if prev_batch_text else '')).strip()
-            conf_prompt = get_conf_prompt(
-                question=question,
-                history_resp=current_history,
-                response=sent,
-                docs=docs,
-                conf_type=conf_type
-            )
-            conf_prompts.append(conf_prompt)
-
-        conf_results = self.generator.generate(
-            conf_prompts,
-            max_new_tokens=1024,
-            gen_type='confidence',
-            process_gen_text=True,
-            conf_type=conf_type
+        conf_levels = self._get_confs_(
+            question=question,
+            history_resp=history_resp,
+            sentences=sentences,
+            docs=docs,
+            conf_type=conf_type,
         )
 
-        # Process each result
-        for i, (sent, conf_result) in enumerate(zip(sentences, conf_results)):
+        for sent, level in zip(sentences, conf_levels):
             modify_text = sent
-            confs_value = conf_result[1]
-            if i > 0:
-                history_resp += (' ' + sentences[i-1])
 
-            # Determine confs_value based on score and reflect logic
-            if "use_reflect" not in self.__dict__ or not self.use_reflect:
-                if confs_value >= self.hallucination_threshold:  # Assuming high confidence
-                    score = 1
-                else:
-                    score = -1
-            else:
-                if confs_value >= 0.7:  # high
-                    score = 1
-                elif score < 0.3:  # low
-                    score = -1
-                else:  # mid
-                    score = 0
+            if level == 0 and reflect_tag:
+                print(f'cur confs:{level}, performed reflect')
+                modify_text = self._reflection_(question, history_resp, sent, docs)
 
-            if score == 0 and reflect_tag:
-                print(f'cur confs:{score}, performed reflect')
-                reft_text = self._reflection_(question, history_resp, sent, docs)
-                reft_cons, reft_conf_type = self._get_confs_class_(question, history_resp, reft_text, docs)
-                if reft_cons >= 0:
-                    modify_text = reft_text
-                    confs_value = reft_cons
-                    conf_type = reft_conf_type
-            elif score < 0:
-                print(f'cur confs:{confs_value}, performed hallucination')
+            elif level < 0:
+                print(f'cur confs:{level}, performed hallucination')
                 hallucination = True
                 reflect_tag = False
 
             ptexts_.append(modify_text)
-            pconfs_.append(score)
-            pconf_types_.append(conf_type)
+            pconfs_.append(level)
 
         assert len(sentences) == len(pconfs_)
 
@@ -328,8 +274,7 @@ class SeqConfidenceRAG(BasicRAG):
         if hall_index >= 0:
             ptexts_ = ptexts_[:hall_index]
             pconfs_ = pconfs_[:hall_index]
-            pconf_types_ = pconf_types_[:hall_index]
-        return ptexts_, pconfs_, pconf_types_, hallucination
+        return ptexts_, pconfs_, hallucination
 
     def inference(self, question, demo):
         ptext = ""     # 用于存储置信度高的序列，以及后续不可提升序列置信度的句子
@@ -339,7 +284,7 @@ class SeqConfidenceRAG(BasicRAG):
         retr_num = 0
         while True:
             _, new_text = self._generate_([], demo, question, ptext)
-            ptexts_, pconfs_, pconf_types_, hallucination = self.modifier(
+            ptexts_, _, hallucination = self.modifier(
                 question,
                 ptext,
                 new_text,
@@ -353,12 +298,10 @@ class SeqConfidenceRAG(BasicRAG):
                     ptexts.extend(ptexts_)
                     ptext += (' ' + (' '.join(ptexts_)))
                     pre_seq = ptexts_[-1]
-                    pre_seq_conf_type = pconf_types_[-1]
                 else:
                     pre_seq = ""
-                    pre_seq_conf_type = 'lack knowledge'
                 retr_num += 1
-                docs, retr_quest = self._get_retr_docs_(question, ptexts, pre_seq, pre_seq_conf_type)
+                docs, retr_quest = self._get_retr_docs_(question, ptexts, pre_seq)
                 _, new_text = self._generate_(docs=docs, demo=demo, question=question, ptext=ptext, generate_length=128)
                 ptexts.append(new_text)
                 ptext += (' ' + new_text)
@@ -375,7 +318,7 @@ class SeqConfidenceRAG(BasicRAG):
                     # ptext = ''
                     unknown_info = ptexts[idx] if idx and idx >= 0 else ptext
                     unknown_info = unknown_info.strip() if len(unknown_info)>0 else ""
-                    docs, _ = self._get_retr_docs_(question, [], unknown_info, 'lack knowledge')
+                    docs, _ = self._get_retr_docs_(question, [], unknown_info)
                     _, new_text = self._generate_(docs, demo, question, ptext, generate_length=self.max_length)
                     ptext += (' ' + new_text)
                     ptext = ptext.strip()

@@ -24,11 +24,11 @@ CONFIDENCE_VALUE_TEMPLATE = """Assess the provided response by evaluating its re
 {response}
 ### Output Format:
 ```json
-{
+{{
     "Confidence": [0.0-1.0],
     "Current Sentence": [Sentence that requires confidence estimation],
     "Explanation": [Concise rationale]
-}
+}}
 ```"""
 
 CONFIDENCE_LEVEL_TEMPLATE = """Evaluate the confidence level for the provided response **only with respect to the specific information it explicitly addresses**, even if the Question requests a comparison or involves multiple entities. Do **not** penalize the response for omitting information that has not yet been provided.
@@ -157,11 +157,11 @@ ENTITY_REPLEACE_TEMPLATE = """Please identify the **entity** in the response tha
 {sentence}
 ### Output Format:
 ```json
-{
+{{
     "Origial": [Original response],
     "Entity": [Entity],
     "Modified": [Modified response]
-}
+}}
 ```"""
 
 CONFIDENCE_USE_DOCS_SUFFIX = """Above are the documents related to the "Context". """

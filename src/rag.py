@@ -1,24 +1,16 @@
 import random
-import os
 import logging
 import numpy as np
 import spacy
 import torch
 from math import exp
-from typing import Optional, Dict, Any, Union
-from scipy.special import softmax
 from retriever import BM25, SGPT, BGEReranker
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoConfig
-from vllm import LLM, SamplingParams
-from openai import OpenAI
-from examples import TUTOR_ADVICE_EXAMPLES, REFLECT_EXAMPLES
 from prompts import *
 from utils import *
 from generators import BasicGenerator, Counter
 
 # GPU_NUMS = torch.cuda.device_count()
-GPU_NUMS = 2
-print(GPU_NUMS)
+GPU_NUMS = 1
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

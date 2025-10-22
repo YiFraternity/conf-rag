@@ -2,3 +2,5 @@ config/
 __pycache__/
 *.pyc
 results/
+*.sh
+*.log

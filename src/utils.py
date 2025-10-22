@@ -163,6 +163,8 @@ def process_confidence_text(raw_text, conf_type='value'):
         score = float(score)
 
     if conf_type == 'level':
+        if isinstance(score, list):
+            score = score[0]
         if score > 1:
             score = score / 5
     # If value still >1 but within 1..5, normalize defensively
@@ -218,6 +220,21 @@ def process_retr_info_text(raw_text):
         return extracted
 
     raise ValueError("Missing 'Query' field")
+
+
+def process_entity_turb_text(raw_text):
+    data = clean_json_txt(raw_text)
+    # Primary: structured JSON
+    if isinstance(data, dict) and "Modified" in data:
+        return data.get("Modified", "")
+
+    # Regex fallbacks
+    extracted = _extract_field_value(raw_text, "Modified")
+    if extracted is not None:
+        return extracted
+
+    raise ValueError("Missing 'Query' field")
+
 
 def is_ans_unknown(answers: List[str]) -> bool:
     unknown_values = [
