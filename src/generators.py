@@ -41,7 +41,6 @@ class BasicGenerator:
             "repetition_penalty": 1.0,
             "num_beams": 1,
             "do_sample": True,
-            "max_tokens": 2048,
         }
         self.__update_generate_config__(params)
         use_openai_flag = params.get("use_openai")
@@ -69,6 +68,7 @@ class BasicGenerator:
                 self.model_config = AutoConfig.from_pretrained(
                     model_name_or_path,
                     trust_remote_code=True,
+                    output_attentions=True,
                 )
                 self.model = AutoModelForCausalLM.from_pretrained(
                     model_name_or_path,
@@ -329,26 +329,19 @@ class BasicGenerator:
             output_scores = True,
         )
         generated_tokens = outputs.sequences[:, input_length:]
-        tokens = [self.tokenizer.decode(t, skip_special_tokens=True) for t in generated_tokens[0]]
-        text = self.tokenizer.decode(generated_tokens[0], skip_special_tokens=True)
-        special_tokens_idx = [idx for idx, t in enumerate(tokens) if t == '']
-        special_tokens_idx_t = torch.tensor(special_tokens_idx, dtype=torch.int)
-        tokens = [t for idx, t in enumerate(tokens) if idx not in special_tokens_idx]     # remove sepical token
-        mask = torch.ones(generated_tokens.shape[1], dtype=torch.bool)
-        mask[special_tokens_idx_t] = False
-        generated_tokens = generated_tokens[:, mask]
-        assert len(tokens) == generated_tokens.shape[1]
+        tokens = self.tokenizer.convert_ids_to_tokens(generated_tokens[0])
+        text = self.tokenizer.decode(generated_tokens[0])
+
         # merge tokens
         range_ = []
         for i, t in enumerate(tokens):
-            # if i == 0 or t.startswith(self.space_token) or generated_tokens[0][i] == 13 or tokens[i-1] == '</s>':
-            if i == 0 or t.startswith(' '):
+            if i == 0 or t.startswith(self.space_token) or generated_tokens[0][i] == 13 or tokens[i-1] == '</s>':
                 range_.append([i, i])
             else:
                 range_[-1][-1] += 1
 
         # attention
-        atten = self.model(generated_tokens, output_attentions=True).attentions[-1][0]
+        atten = self.model(generated_tokens, output_attentions=True, return_dict=True).attentions[-1][0]
         if solver == "max":
             mean_atten, _ = torch.max(atten, dim=1)
             mean_atten = torch.mean(mean_atten, dim=0)

@@ -1,6 +1,25 @@
-ANSWER_QUESTION_TEMPLETE = """{examples}{docs}{use_demo_start}Answer the following question by reasoning step-by-step in English{use_demo_end}
-Question: {question}
-Answer: {gen_text}"""
+ANSWER_QUESTION_TEMPLETE = """{examples}{docs}Answer in the same format as before.Answer the following question in English by continuing the existing partial answer.
+
+Instructions:
+- Do NOT summarize.
+- The "cur_answer" field should contain exactly the provided partial answer.
+- The "continue" field should contain your newly generated continuation.
+- Ensure logical and stylistic coherence with the existing text.
+- Output strictly in valid JSON format (no extra text or comments outside JSON).
+
+### Question:
+{question}
+### Current answer:
+{gen_text}
+
+### Output Format:
+```json
+{
+  "cur_answer": "The existing partial answer here.",
+  "continue": "Your continued and completed answer here."
+}
+```
+"""
 
 ANSWER_USE_DEMO_TEMPLATE = """Answer in the same format as before. """
 ANSWER_NOT_USE_DEMO_TEMPLATE = """When the answer is sufficient to resolve the question, stop reasoning immediately and provide the answer, starting with "So, the answer is". """

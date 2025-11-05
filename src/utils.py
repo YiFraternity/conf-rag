@@ -1,9 +1,13 @@
 import re
 from typing import List, Dict, Any, Union, Optional
 import json
+import logging
 import spacy
 nlp = spacy.load("en_core_web_sm")
 from prompts import *
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ANSWER_NEW_TOKEN_NUM = 2048
 
@@ -131,7 +135,9 @@ def is_complete_sentence(sentence):
     return sentence.endswith(('。', '？', '！', '.', '?', '!'))
 
 def process_answer_text(raw_text, pre_answer):
-    text = raw_text
+    text = clean_json_txt(raw_text)
+    if isintance(text, dict) and "continue" in text:
+        return text.get('continue')
     ptns = r'(?i).*?\banswer\s*[:：]\s*'
     pattern = re.compile(ptns, re.DOTALL)
     result = re.sub(pattern, '', text)
@@ -172,7 +178,8 @@ def process_confidence_text(raw_text, conf_type='value'):
         score = score / 5
 
     if not isinstance(score, (int, float)) or not (0 <= score <= 1):
-        raise ValueError("Score must be a number between 0 and 1")
+        logger.warning(f"Invalid confidence score: {score}")
+        score = 0
 
     return score
 
@@ -300,8 +307,6 @@ def get_answer_prompt(docs: list, demo: list, question: str, text:str):
         examples=examples,
         docs=doc_str,
         use_docs=ANSWER_USE_DOCS_TEMPLATE if len(docs) > 0 else '',
-        use_demo_start=ANSWER_USE_DEMO_TEMPLATE if len(demo) > 0 else ANSWER_NOT_USE_DEMO_TEMPLATE,
-        use_demo_end=', following the example above.' if len(demo) > 0 else '.',
         question=question,
         gen_text=text,
     )
@@ -329,23 +334,3 @@ def get_reason_prompt(docs, reason_pth):
         reasoning=reason_pth,
     )
     return reason_prompt
-
-
-if __name__ == '__main__':
-    text = "1 This is a test. 2. This is another test. 3.This is a third test.\n 4. This is a fourth test."
-    # sents = split_sentences(text)
-    # print(len(sents), sents)
-    text = """Sure, I\'d be happy to help! Based on the context you provided, my response would be:\n\n"1. Seraphim is a concept in Christian theology, referring to a high rank of angels."\n\nMy confidence in this response is 1, as I am familiar with the concept of Seraphim in Christian theology and can provide a correct definition.</s>"""
-    test_txts = ["I don't know", "I'm not sure", "The answer is unknown", "The answer is A"]
-    unknow_answer = []
-    with open('results/SeqValue/Qwen1.5-7B-Chat/hotpotqa/BGEReranker/output.txt', 'r') as f:
-        for line in f:
-            text = line.strip()
-            import json
-            data = json.loads(text)
-            pred = data['prediction']
-            answer = split_sentences(pred)[-1].strip()
-            if is_ans_unknown(answer):
-                unknow_answer.append(data['qid'])
-    # print(process_confidence_text(text))
-
