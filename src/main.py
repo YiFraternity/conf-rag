@@ -51,6 +51,10 @@ def get_args():
         args.shuffle = False
     if "use_counter" not in args:
         args.use_counter = True
+    if "save_trace" not in args:
+        args.save_trace = False
+    if "disable_retrieval" not in args:
+        args.disable_retrieval = False
     return args
 
 
@@ -72,6 +76,9 @@ def main():
         json.dump(args.__dict__, f, indent=4)
     # create output file
     output_file = open(os.path.join(args.output_dir, "output.txt"), "w")
+    trace_file = None
+    if args.save_trace:
+        trace_file = open(os.path.join(args.output_dir, "trace.jsonl"), "w")
 
     # load data
     if args.dataset == "strategyqa":
@@ -116,7 +123,12 @@ def main():
     for i in tqdm(range(len(data))):
         last_counter = copy(model.counter)
         batch = data[i]
-        pred = model.inference(batch["question"], batch["demo"])
+        infer_ret = model.inference(batch["question"], batch["demo"])
+        trace = None
+        if isinstance(infer_ret, tuple):
+            pred, trace = infer_ret
+        else:
+            pred = infer_ret
         pred = pred.strip()
         ret = {
             "qid": batch["qid"],
@@ -125,6 +137,11 @@ def main():
         if args.use_counter:
             ret.update(model.counter.calc(last_counter))
         output_file.write(json.dumps(ret)+"\n")
+        if trace_file is not None and trace is not None:
+            trace["qid"] = batch["qid"]
+            trace["question"] = batch["question"]
+            trace["final_prediction"] = pred
+            trace_file.write(json.dumps(trace, ensure_ascii=False) + "\n")
 
 if __name__ == "__main__":
     main()

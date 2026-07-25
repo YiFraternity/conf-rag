@@ -8,6 +8,20 @@ class SeqConfidenceRAG(BasicRAG):
     def __init__(self, args):
         super().__init__(args)
 
+    def _build_trace_event(self, loop_id, sentence_id, sentence, conf_value, conf_type, docs):
+        return {
+            "loop_id": loop_id,
+            "sentence_id": sentence_id,
+            "sentence": sentence,
+            "confidence_value": conf_value,
+            "confidence_type": conf_type,
+            "trigger_retrieval": False,
+            "retrieval_disabled": False,
+            "retrieval_query": "",
+            "retrieved_docs_count": len(docs) if docs is not None else 0,
+            "post_retrieval_text": "",
+        }
+
     def _get_seq_confs_value_(self, question:str, history_resp:str, sentences:List[str], docs:list, conf_type='value') -> List[float]:
         conf_prompts = []
         for i, sent in enumerate(sentences):
@@ -239,7 +253,7 @@ class SeqConfidenceRAG(BasicRAG):
         reflect_tag = True
         sentences = split_sentences(text)
         if len(sentences) == 0:
-            return [], [], hallucination
+            return [], [], [], hallucination
 
         ptexts_, pconfs_, pconf_types_ = [], [], []
         history_resp = ptext
@@ -267,6 +281,7 @@ class SeqConfidenceRAG(BasicRAG):
 
             ptexts_.append(modify_text)
             pconfs_.append(level)
+            pconf_types_.append(conf_type)
 
         assert len(sentences) == len(pconfs_)
 
@@ -274,7 +289,8 @@ class SeqConfidenceRAG(BasicRAG):
         if hall_index >= 0:
             ptexts_ = ptexts_[:hall_index]
             pconfs_ = pconfs_[:hall_index]
-        return ptexts_, pconfs_, hallucination
+            pconf_types_ = pconf_types_[:hall_index]
+        return ptexts_, pconfs_, pconf_types_, hallucination
 
     def inference(self, question, demo):
         ptext = ""     # 用于存储置信度高的序列，以及后续不可提升序列置信度的句子
@@ -282,17 +298,32 @@ class SeqConfidenceRAG(BasicRAG):
         docs = []
         old_len = -1
         retr_num = 0
+        loop_id = 0
+        trace_events = []
         while True:
             _, new_text = self._generate_([], demo, question, ptext)
-            ptexts_, _, hallucination = self.modifier(
+            ptexts_, pconfs_, pconf_types_, hallucination = self.modifier(
                 question,
                 ptext,
                 new_text,
                 docs=docs,
             )
+            curr_events = []
+            for sent_idx, (sent, conf_value) in enumerate(zip(ptexts_, pconfs_)):
+                curr_events.append(
+                    self._build_trace_event(
+                        loop_id,
+                        sent_idx,
+                        sent,
+                        conf_value,
+                        pconf_types_[sent_idx] if sent_idx < len(pconf_types_) else "",
+                        docs,
+                    )
+                )
             if not hallucination:
                 ptext += (' ' + (' '.join(ptexts_)))
                 ptexts.extend(ptexts_)
+                trace_events.extend(curr_events)
             else:
                 if len(ptexts_) > 0:
                     ptexts.extend(ptexts_)
@@ -300,11 +331,26 @@ class SeqConfidenceRAG(BasicRAG):
                     pre_seq = ptexts_[-1]
                 else:
                     pre_seq = ""
-                retr_num += 1
-                docs, retr_quest = self._get_retr_docs_(question, ptexts, pre_seq)
-                _, new_text = self._generate_(docs=docs, demo=demo, question=question, ptext=ptext, generate_length=128)
-                ptexts.append(new_text)
-                ptext += (' ' + new_text)
+                if curr_events:
+                    trace_events.extend(curr_events[:-1])
+                    curr_events[-1]["trigger_retrieval"] = not getattr(self, "disable_retrieval", False)
+                    curr_events[-1]["retrieval_disabled"] = getattr(self, "disable_retrieval", False)
+                if getattr(self, "disable_retrieval", False):
+                    if curr_events:
+                        trace_events.append(curr_events[-1])
+                    docs = []
+                else:
+                    retr_num += 1
+                    docs, retr_quest = self._get_retr_docs_(question, ptexts, pre_seq)
+                    if curr_events:
+                        curr_events[-1]["retrieval_query"] = retr_quest
+                        curr_events[-1]["retrieved_docs_count"] = len(docs)
+                    _, new_text = self._generate_(docs=docs, demo=demo, question=question, ptext=ptext, generate_length=128)
+                    ptexts.append(new_text)
+                    ptext += (' ' + new_text)
+                    if curr_events:
+                        curr_events[-1]["post_retrieval_text"] = new_text
+                        trace_events.append(curr_events[-1])
             ptext = ptext.strip()
             cur_len = len(self.generator.tokenizer.encode(ptext)) if ptext != "" else 0
 
@@ -324,5 +370,11 @@ class SeqConfidenceRAG(BasicRAG):
                     ptext = ptext.strip()
                 break
             old_len = cur_len
+            loop_id += 1
 
+        if getattr(self, "save_trace", False):
+            return ptext, {
+                "retrieval_enabled": not getattr(self, "disable_retrieval", False),
+                "events": trace_events,
+            }
         return ptext
