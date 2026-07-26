@@ -277,12 +277,12 @@ def is_ans_unknown(answers: List[str]) -> bool:
         "does not",
         "not specify",
     ]
+    pattern = r'(?i)the answer is[：:]?$'
     for idx, answer in enumerate(answers):
         if any(re.search(r'(?i).*?\b{}\b.*'.format(value), answer) for value in unknown_values):
             return idx, True
-    pattern = r'(?i)the answer is[：:]?$'
-    if re.search(pattern, answer):
-        return -1, True
+        if re.search(pattern, answer):
+            return -1, True
     return None, False
 
 
