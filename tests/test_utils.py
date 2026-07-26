@@ -28,3 +28,11 @@ def test_is_ans_unknown_returns_false_for_empty_answers():
     utils = _load_utils_with_stubbed_spacy()
 
     assert utils.is_ans_unknown([]) == (None, False)
+
+
+def test_process_reflect_text_extracts_string_from_nested_modified_object():
+    utils = _load_utils_with_stubbed_spacy()
+
+    raw_text = '{"Modified": {"text": "Shirley Temple later served as U.S. Ambassador to Ghana."}}'
+
+    assert utils.process_reflect_text(raw_text) == "Shirley Temple later served as U.S. Ambassador to Ghana."

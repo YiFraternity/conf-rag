@@ -75,6 +75,22 @@ def _extract_field_value(raw_text: str, field: str) -> Optional[str]:
             return m.group(2).strip()
     return None
 
+
+def _coerce_text_value(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("text", "response", "modified", "answer", "content", "query", "advice"):
+            nested = value.get(key)
+            if nested is not None:
+                return _coerce_text_value(nested)
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, list):
+        return " ".join(_coerce_text_value(item) for item in value if item is not None).strip()
+    if value is None:
+        return ""
+    return str(value).strip()
+
 def clean_json_txt(json_txt: str) -> Union[Dict[str, Any], str]:
     """
     从可能包含 ```json ... ``` 或 ``` ... ``` 的文本中提取 JSON 并解析为 dict。
@@ -186,19 +202,19 @@ def process_confidence_text(raw_text, conf_type='value'):
 def process_advice_text(raw_text):
     data = clean_json_txt(raw_text)
     if isinstance(data, dict) and "Advice" in data:
-        return data.get("Advice", "")
+        return _coerce_text_value(data.get("Advice", ""))
     extracted = _extract_field_value(raw_text, "Advice")
     if extracted is not None:
-        return extracted
+        return _coerce_text_value(extracted)
     raise ValueError("Missing 'Advice' field")
 
 def process_reflect_text(raw_text):
     data = clean_json_txt(raw_text)
     if isinstance(data, dict) and "Modified" in data:
-        return data.get("Modified", "")
+        return _coerce_text_value(data.get("Modified", ""))
     extracted = _extract_field_value(raw_text, "Modified")
     if extracted is not None:
-        return extracted
+        return _coerce_text_value(extracted)
     raise ValueError("Missing 'Modified' field")
 
 
@@ -219,12 +235,12 @@ def process_retr_info_text(raw_text):
     data = clean_json_txt(raw_text)
     # Primary: structured JSON
     if isinstance(data, dict) and "Query" in data:
-        return data.get("Query", "")
+        return _coerce_text_value(data.get("Query", ""))
 
     # Regex fallbacks
     extracted = _extract_field_value(raw_text, "Query")
     if extracted is not None:
-        return extracted
+        return _coerce_text_value(extracted)
 
     raise ValueError("Missing 'Query' field")
 
@@ -233,12 +249,12 @@ def process_entity_turb_text(raw_text):
     data = clean_json_txt(raw_text)
     # Primary: structured JSON
     if isinstance(data, dict) and "Modified" in data:
-        return data.get("Modified", "")
+        return _coerce_text_value(data.get("Modified", ""))
 
     # Regex fallbacks
     extracted = _extract_field_value(raw_text, "Modified")
     if extracted is not None:
-        return extracted
+        return _coerce_text_value(extracted)
 
     raise ValueError("Missing 'Query' field")
 
