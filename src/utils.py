@@ -136,7 +136,7 @@ def is_complete_sentence(sentence):
 
 def process_answer_text(raw_text, pre_answer):
     text = clean_json_txt(raw_text)
-    if isintance(text, dict) and "continue" in text:
+    if isinstance(text, dict) and "continue" in text:
         return text.get('continue')
     ptns = r'(?i).*?\banswer\s*[:：]\s*'
     pattern = re.compile(ptns, re.DOTALL)

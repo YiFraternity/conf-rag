@@ -32,7 +32,7 @@ class BM25:
         if engine == 'elasticsearch':
             self.max_ret_topk = 1000
             self.retriever = EvaluateRetrieval(
-                BM25Search(index_name=index_name, hostname='localhost', initialize=False, number_of_shards=1),
+                BM25Search(index_name=index_name, hostname='http://localhost:9200', initialize=False, number_of_shards=1),
                 k_values=[self.max_ret_topk],
             )
 

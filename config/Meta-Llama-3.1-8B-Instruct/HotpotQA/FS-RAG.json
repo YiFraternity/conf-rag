@@ -1,6 +1,6 @@
 {
-    "model_name_or_path": "/home/yhliu/models/open_models/llama/Meta-Llama-3.1-8B-Instruct",
-    "bge_model_name_or_path": "/home/yhliu/models/open_models/bge/bge-reranker-base",
+    "model_name_or_path": "/home/share/models/modelscope/llama/Meta-Llama-3.1-8B-Instruct",
+    "bge_model_name_or_path": "/home/share/models/modelscope/bge/bge-reranker-base",
     "method": "fix-sentence-retrieval",
     "dataset": "hotpotqa",
     "data_path": "data/hotpotqa",

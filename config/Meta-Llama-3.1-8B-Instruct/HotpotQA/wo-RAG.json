@@ -1,5 +1,5 @@
 {
-    "model_name_or_path": "/home/yhliu/models/open_models/llama/Meta-Llama-3.1-8B-Instruct",
+    "model_name_or_path": "/home/share/models/modelscope/llama/Meta-Llama-3.1-8B-Instruct",
     "method": "non-retrieval",
     "dataset": "hotpotqa",
     "data_path": "data/hotpotqa",

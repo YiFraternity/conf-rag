@@ -1,6 +1,7 @@
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='4,5'
-os.environ['VLLM_WORKER_MULTIPROC_METHOD']='spawn'
+from runtime_env import configure_vllm_runtime_env
+
+configure_vllm_runtime_env(os.environ)
 import json
 import argparse
 import logging

@@ -10,7 +10,7 @@ from openai import OpenAI
 from prompts import *
 from utils import *
 
-GPU_NUMS = 1
+GPU_NUMS = max(1, torch.cuda.device_count())
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -149,7 +149,6 @@ class BasicGenerator:
             top_p=self.generate_config['top_p'],
             top_k=self.generate_config['top_k'],
             min_p=0.0 if self.generate_config['temperature']==0 else 1,
-            best_of=1,
             max_tokens=max_new_tokens,
         )
         outputs_t = self.model.chat(
@@ -286,7 +285,6 @@ class BasicGenerator:
                 top_p=self.generate_config['top_p'],
                 top_k=self.generate_config['top_k'],
                 min_p=0.0 if self.generate_config['temperature']==0 else 1,
-                best_of=1,
                 max_tokens=max_new_tokens,
             )
             outputs = self.model.chat(

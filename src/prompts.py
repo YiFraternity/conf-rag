@@ -14,10 +14,10 @@ Instructions:
 
 ### Output Format:
 ```json
-{
-  "cur_answer": "The existing partial answer here.",
-  "continue": "Your continued and completed answer here."
-}
+{{
+    "cur_answer": "The existing partial answer here.",
+    "continue": "Your continued and completed answer here."
+}}
 ```
 """
 
