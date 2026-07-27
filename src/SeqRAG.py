@@ -2,11 +2,39 @@
 from examples import TUTOR_ADVICE_EXAMPLES, REFLECT_EXAMPLES
 from prompts import *
 from utils import *
+from utils import _coerce_text_value
 from rag import BasicRAG
 
 class SeqConfidenceRAG(BasicRAG):
     def __init__(self, args):
         super().__init__(args)
+
+    def _get_experiment_condition(self):
+        condition = getattr(self, "experiment_condition", None)
+        if condition in (None, ""):
+            return None
+        valid_conditions = {"baseline", "low_only", "mid_only", "high_only"}
+        if condition not in valid_conditions:
+            raise ValueError(f"Unsupported experiment_condition: {condition}")
+        return condition
+
+    def _should_retrieve_for_level(self, level):
+        condition = self._get_experiment_condition()
+        if condition == "baseline":
+            return False
+        if condition == "low_only":
+            return level == -1
+        if condition == "mid_only":
+            return level == 0
+        if condition == "high_only":
+            return level == 1
+        return level < 0
+
+    def _should_reflect_for_level(self, level):
+        condition = self._get_experiment_condition()
+        if condition is not None:
+            return False
+        return level == 0
 
     def _build_trace_event(self, loop_id, sentence_id, sentence, conf_value, conf_type, docs):
         return {
@@ -268,13 +296,13 @@ class SeqConfidenceRAG(BasicRAG):
         )
 
         for sent, level in zip(sentences, conf_levels):
-            modify_text = sent
+            modify_text = _coerce_text_value(sent)
 
-            if level == 0 and reflect_tag:
+            if self._should_reflect_for_level(level) and reflect_tag:
                 print(f'cur confs:{level}, performed reflect')
-                modify_text = self._reflection_(question, history_resp, sent, docs)
+                modify_text = _coerce_text_value(self._reflection_(question, history_resp, sent, docs))
 
-            elif level < 0:
+            elif self._should_retrieve_for_level(level):
                 print(f'cur confs:{level}, performed hallucination')
                 hallucination = True
                 reflect_tag = False
@@ -308,6 +336,7 @@ class SeqConfidenceRAG(BasicRAG):
                 new_text,
                 docs=docs,
             )
+            ptexts_ = [_coerce_text_value(text) for text in ptexts_]
             curr_events = []
             for sent_idx, (sent, conf_value) in enumerate(zip(ptexts_, pconfs_)):
                 curr_events.append(
@@ -346,6 +375,7 @@ class SeqConfidenceRAG(BasicRAG):
                         curr_events[-1]["retrieval_query"] = retr_quest
                         curr_events[-1]["retrieved_docs_count"] = len(docs)
                     _, new_text = self._generate_(docs=docs, demo=demo, question=question, ptext=ptext, generate_length=128)
+                    new_text = _coerce_text_value(new_text)
                     ptexts.append(new_text)
                     ptext += (' ' + new_text)
                     if curr_events:
@@ -374,6 +404,7 @@ class SeqConfidenceRAG(BasicRAG):
 
         if getattr(self, "save_trace", False):
             return ptext, {
+                "experiment_condition": self._get_experiment_condition(),
                 "retrieval_enabled": not getattr(self, "disable_retrieval", False),
                 "events": trace_events,
             }

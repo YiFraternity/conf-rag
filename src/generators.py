@@ -17,6 +17,27 @@ logger = logging.getLogger(__name__)
 
 nlp = spacy.load("en_core_web_sm")
 
+
+def build_vllm_init_kwargs(model_name_or_path: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    if params is None:
+        params = {}
+
+    kwargs = {
+        "model": model_name_or_path,
+        "max_model_len": int(params.get("max_model_len", 4096)),
+        "tensor_parallel_size": int(params.get("tensor_parallel_size", GPU_NUMS)),
+    }
+    optional_keys = (
+        "pipeline_parallel_size",
+        "gpu_memory_utilization",
+        "max_num_seqs",
+        "enforce_eager",
+    )
+    for key in optional_keys:
+        if key in params and params[key] is not None:
+            kwargs[key] = params[key]
+    return kwargs
+
 class BasicGenerator:
 
     def __update_generate_config__(self, params):
@@ -84,7 +105,7 @@ class BasicGenerator:
                     self.tokenizer.pad_token = self.tokenizer.eos_token
                 self.use_vllm = False
             else:
-                self.model = LLM(model=model_name_or_path, max_model_len=4096, tensor_parallel_size=GPU_NUMS)
+                self.model = LLM(**build_vllm_init_kwargs(model_name_or_path, params))
                 self.use_vllm = True
 
     def _get_chat_message_(self, prompt):

@@ -31,7 +31,11 @@ import argparse
 from tqdm import tqdm
 from copy import copy
 import logging
+from runtime_env import configure_vllm_runtime_env
 from data import StrategyQA, WikiMultiHopQA, HotpotQA, IIRC
+
+configure_vllm_runtime_env(os.environ)
+
 from generate import *
 
 logging.basicConfig(level=logging.INFO)
@@ -55,6 +59,8 @@ def get_args():
         args.save_trace = False
     if "disable_retrieval" not in args:
         args.disable_retrieval = False
+    if "experiment_condition" not in args:
+        args.experiment_condition = None
     return args
 
 

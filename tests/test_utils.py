@@ -36,3 +36,11 @@ def test_process_reflect_text_extracts_string_from_nested_modified_object():
     raw_text = '{"Modified": {"text": "Shirley Temple later served as U.S. Ambassador to Ghana."}}'
 
     assert utils.process_reflect_text(raw_text) == "Shirley Temple later served as U.S. Ambassador to Ghana."
+
+
+def test_process_answer_text_extracts_string_from_nested_continue_object():
+    utils = _load_utils_with_stubbed_spacy()
+
+    raw_text = '{"continue": {"text": "So, the answer is Shirley Temple."}}'
+
+    assert utils.process_answer_text(raw_text, pre_answer="") == "So, the answer is Shirley Temple."
